@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工程單價分析系統 Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
+    <!-- 引入 SheetJS 用於 Excel 匯出匯入 -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <style>
+        :root { --architectural-color: #bbf7d0; }
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f0fdf4;
+            background-image: 
+                linear-gradient(var(--architectural-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--architectural-color) 1px, transparent 1px),
+                linear-gradient(rgba(187, 247, 208, 0.3) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(187, 247, 208, 0.3) 1px, transparent 1px);
+            background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+            background-attachment: fixed;
+        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        
+        @media print {
+            @page { size: A4; margin: 15mm; }
+            body { background: white !important; }
+            .print-hidden { display: none !important; }
+            .print-paper { 
+                box-shadow: none !important; 
+                margin: 0 !important; 
+                padding: 0 !important;
+                width: 100% !important;
+                max-width: none !important;
+            }
+            input, select { border: none !important; background: transparent !important; color: black !important; -webkit-appearance: none; }
+        }
+
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        
+        .modal-enter { animation: modalFadeIn 0.3s ease-out; }
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 flex flex-col">
+
+    <!-- 頂部導覽列 -->
+    <header class="bg-white/80 backdrop-blur-md border-b border-green-100 px-4 md:px-8 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20 print-hidden shadow-sm gap-4">
+        <div class="flex items-center gap-3">
+            <div class="bg-green-600 p-2 rounded-lg text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 2v-4m0 10v4a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2m3-3l3 3m0 0l3-3m-3 3v8"></path></svg>
+            </div>
+            <h1 class="font-black text-xl md:text-2xl tracking-tighter">工程單價分析系統 <span class="text-green-600">Pro</span></h1>
+        </div>
+        
+        <div class="flex items-center gap-2 md:gap-3">
+            <!-- 視圖切換 -->
+            <div class="flex bg-slate-100 p-1 rounded-xl">
+                <button onclick="switchView('editor')" id="btn-editor" class="px-3 md:px-5 py-2 rounded-lg font-bold transition-all bg-white shadow-sm text-green-700">分析表</button>
+                <button onclick="switchView('database')" id="btn-database" class="px-3 md:px-5 py-2 rounded-lg font-bold transition-all text-slate-500 hover:text-slate-700">資料庫</button>
+            </div>
+            
+            <!-- Excel 功能鍵 -->
+            <div class="flex items-center gap-2 border-l pl-3 ml-1 border-slate-200">
+                <button onclick="exportToExcel()" class="flex items-center gap-1 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-lg font-bold hover:bg-emerald-100 transition-all text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    匯出
+                </button>
+                <button onclick="triggerImport()" class="flex items-center gap-1 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg font-bold hover:bg-blue-100 transition-all text-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    匯入
+                </button>
+                <input type="file" id="excel-import" class="hidden" accept=".xlsx, .xls" onchange="handleExcelImport(event)">
+            </div>
+
+            <button onclick="window.print()" class="p-2 hover:bg-green-100 rounded-xl text-slate-500">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex overflow-hidden flex-col md:flex-row">
+        <!-- 側邊欄 (分析表清單) -->
+        <aside id="sidebar" class="w-full md:w-80 bg-white/70 backdrop-blur-md border-r border-green-100 flex flex-col print-hidden shrink-0 transition-all max-h-[40vh] md:max-h-full">
+            <div class="p-4 border-b">
+                <button onclick="addProject()" class="w-full py-3 bg-slate-900 text-white rounded-xl flex items-center justify-center gap-2 font-bold shadow-lg hover:bg-slate-800 transition-all">+ 新增分析表</button>
+            </div>
+            <div id="project-list" class="flex-1 overflow-y-auto p-3 space-y-3">
+                <!-- 工程按鈕動態插入 -->
+            </div>
+        </aside>
+
+        <!-- 內容區 -->
+        <section id="content-area" class="flex-1 overflow-auto p-4 md:p-8 print-paper">
+            <!-- 編輯器視圖 -->
+            <div id="view-editor" class="mx-auto w-full max-w-[210mm] bg-white shadow-2xl p-6 md:p-10 min-h-full rounded-sm print-paper">
+                <div class="flex justify-between items-start mb-10">
+                    <div class="w-full text-center">
+                        <h2 class="text-3xl md:text-4xl font-black text-slate-900 tracking-widest">單 價 分 析 表</h2>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 pb-8 border-b-2">
+                    <div class="flex flex-col gap-1">
+                        <label class="font-bold text-slate-400 text-xs uppercase tracking-wider">工項編號</label>
+                        <input type="text" id="proj-code" onkeydown="handleEnter(event)" onblur="updateProjInfo('code', this.value)" class="text-lg font-bold bg-slate-50 p-3 rounded-lg border border-slate-100 focus:border-green-500 outline-none w-full transition-colors">
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <label class="font-bold text-slate-400 text-xs uppercase tracking-wider">工程名稱</label>
+                        <input type="text" id="proj-name" onkeydown="handleEnter(event)" onblur="updateProjInfo('name', this.value)" class="text-lg font-bold bg-slate-50 p-3 rounded-lg border border-slate-100 focus:border-green-500 outline-none w-full transition-colors">
+                    </div>
+                    <div class="flex flex-col gap-1">
+                        <label class="font-bold text-slate-400 text-xs uppercase tracking-wider">計價單位</label>
+                        <input type="text" id="proj-unit" onkeydown="handleEnter(event)" onblur="updateProjInfo('unit', this.value)" class="text-lg font-bold bg-slate-50 p-3 rounded-lg border border-slate-100 focus:border-green-500 outline-none w-full transition-colors">
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto hide-scrollbar">
+                    <table class="w-full min-w-[600px]">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-500 border-b-2 border-slate-200 text-sm">
+                                <th class="py-4 px-2 text-left w-12 print-hidden">#</th>
+                                <th class="py-4 px-2 text-left">工料說明與規格</th>
+                                <th class="py-4 px-2 text-center w-20">單位</th>
+                                <th class="py-4 px-2 text-right w-24">數量</th>
+                                <th class="py-4 px-2 text-right w-32">單價</th>
+                                <th class="py-4 px-2 text-right w-36">複價</th>
+                                <th class="py-4 px-2 w-12 print-hidden"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="items-body" class="divide-y divide-slate-100">
+                            <!-- 項目動態插入 -->
+                        </tbody>
+                        <tfoot>
+                            <tr class="border-t-4 border-slate-900 bg-slate-50">
+                                <td colspan="5" class="py-8 px-6 text-right font-black text-slate-400 uppercase italic text-lg md:text-xl">合計單價 (TWD)</td>
+                                <td id="total-sum" class="py-8 px-2 text-right font-mono text-2xl md:text-3xl font-black text-green-600">0</td>
+                                <td class="print-hidden"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <div class="flex gap-4 mt-8 print-hidden">
+                    <button onclick="addItem()" class="flex-1 py-4 border-2 border-dashed border-slate-200 text-slate-400 hover:border-green-400 hover:text-green-600 hover:bg-green-50 rounded-xl flex items-center justify-center gap-3 transition-all font-bold">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        新增工料
+                    </button>
+                    <button onclick="deleteCurrentProject()" class="px-6 py-4 border-2 border-slate-100 text-slate-300 hover:text-red-500 hover:border-red-100 rounded-xl transition-all">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 資料庫視圖 -->
+            <div id="view-database" class="hidden mx-auto w-full max-w-[210mm] bg-white rounded-2xl shadow-xl p-6 md:p-10 border border-green-100">
+                <div class="flex flex-col md:flex-row justify-between items-center gap-4 mb-10 pb-8 border-b">
+                    <div>
+                        <h2 class="text-3xl font-black text-slate-900">工料資料庫</h2>
+                        <p class="text-slate-400 text-sm mt-1">管理與排序通用單價資料</p>
+                    </div>
+                    <button onclick="addMaterial()" class="w-full md:w-auto bg-green-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-green-700 transition-colors shadow-lg">+ 新增資料</button>
+                </div>
+                <div class="overflow-x-auto hide-scrollbar">
+                    <table class="w-full min-w-[600px] border-collapse">
+                        <thead>
+                            <tr class="bg-slate-900 text-white">
+                                <th class="p-4 text-center w-24">排序</th>
+                                <th class="p-4 text-left">名稱 / 規格內容</th>
+                                <th class="p-4 text-center w-24">單位</th>
+                                <th class="p-4 text-right w-40">預設單價</th>
+                                <th class="p-4 w-20"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="material-list" class="divide-y divide-slate-100">
+                            <!-- 資料庫動態插入 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 自定義訊息彈窗 -->
+    <div id="modal-container" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 modal-enter">
+            <h3 id="modal-title" class="text-xl font-black mb-2">通知</h3>
+            <p id="modal-desc" class="text-slate-500 mb-6">內容</p>
+            <div class="flex justify-end gap-3">
+                <button id="modal-cancel" class="px-6 py-2 rounded-lg font-bold hover:bg-slate-100">取消</button>
+                <button id="modal-confirm" class="px-6 py-2 bg-slate-900 text-white rounded-lg font-bold">確定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通知標籤 -->
+    <div id="toast" class="fixed bottom-8 right-8 z-50 transition-all duration-500 translate-y-20 opacity-0">
+        <div class="bg-emerald-600 text-white px-6 py-4 rounded-2xl shadow-xl flex items-center gap-3 font-bold">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            <span id="toast-msg">已儲存</span>
+        </div>
+    </div>
+
+    <script type="module">
+        // --- 資料管理 ---
+        let materials = JSON.parse(localStorage.getItem('materials')) || [
+            { id: 'm1', name: '3000psi 混凝土', unit: 'm3', price: 2800 },
+            { id: 'm2', name: '普通工', unit: '工', price: 2200 },
+            { id: 'm3', name: '鋼筋加工與綁紮', unit: 't', price: 25000 },
+            { id: 'm4', name: '清水模板組拆', unit: 'm2', price: 650 }
+        ];
+
+        let projects = JSON.parse(localStorage.getItem('projects')) || [
+            {
+                id: 'p1', code: '03310-01', name: '結構混凝土澆置', unit: 'm3',
+                items: [
+                    { id: 'i1', materialId: 'm1', quantity: 1.05, price: 2800 },
+                    { id: 'i2', materialId: 'm2', quantity: 0.5, price: 2200 }
+                ]
+            }
+        ];
+
+        let currentProjId = projects[0]?.id || null;
+
+        // --- 工具函數 ---
+        window.handleEnter = (e) => { if (e.key === 'Enter') e.target.blur(); };
+
+        const showToast = (msg = "已自動存檔") => {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').innerText = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 2000);
+        };
+
+        const customConfirm = (title, desc, onConfirm) => {
+            const container = document.getElementById('modal-container');
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-desc').innerText = desc;
+            container.classList.remove('hidden');
+            const close = () => container.classList.add('hidden');
+            document.getElementById('modal-cancel').onclick = close;
+            document.getElementById('modal-confirm').onclick = () => { onConfirm(); close(); };
+        };
+
+        const calculateProjTotal = (proj) => {
+            return proj.items.reduce((sum, i) => sum + (i.quantity * i.price), 0);
+        };
+
+        // --- Excel 匯出匯入功能 ---
+        window.exportToExcel = () => {
+            const wb = XLSX.utils.book_new();
+
+            // 1. 準備工料資料庫分頁
+            const materialData = materials.map((m, idx) => ({
+                "序號": idx + 1,
+                "工料名稱": m.name,
+                "單位": m.unit,
+                "單價": m.price,
+                "ID": m.id
+            }));
+            const wsMat = XLSX.utils.json_to_sheet(materialData);
+            XLSX.utils.book_append_sheet(wb, wsMat, "工料資料庫");
+
+            // 2. 準備分析表清單分頁
+            const projectData = projects.map(p => ({
+                "ID": p.id,
+                "工項編號": p.code,
+                "工程名稱": p.name,
+                "單位": p.unit,
+                "合計單價": calculateProjTotal(p)
+            }));
+            const wsProj = XLSX.utils.json_to_sheet(projectData);
+            XLSX.utils.book_append_sheet(wb, wsProj, "分析表清單");
+
+            // 3. 準備明細分頁 (所有細項放在一起)
+            const detailData = [];
+            projects.forEach(p => {
+                p.items.forEach(item => {
+                    const mat = materials.find(m => m.id === item.materialId);
+                    detailData.push({
+                        "分析表ID": p.id,
+                        "分析表名稱": p.name,
+                        "工料名稱": mat ? mat.name : "未知工料",
+                        "工料ID": item.materialId,
+                        "數量": item.quantity,
+                        "單價": item.price,
+                        "複價": item.quantity * item.price
+                    });
+                });
+            });
+            const wsDetails = XLSX.utils.json_to_sheet(detailData);
+            XLSX.utils.book_append_sheet(wb, wsDetails, "分析表細項明細");
+
+            // 寫出檔案
+            XLSX.writeFile(wb, `工程單價分析備份_${new Date().toLocaleDateString()}.xlsx`);
+            showToast("Excel 匯出成功");
+        };
+
+        window.triggerImport = () => {
+            document.getElementById('excel-import').click();
+        };
+
+        window.handleExcelImport = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                try {
+                    const data = evt.target.result;
+                    const workbook = XLSX.read(data, { type: 'binary' });
+
+                    // 讀取工料庫
+                    const wsMat = workbook.Sheets["工料資料庫"];
+                    if (!wsMat) throw new Error("找不到工料資料庫分頁");
+                    const matRows = XLSX.utils.sheet_to_json(wsMat);
+                    const newMaterials = matRows.map(r => ({
+                        id: r["ID"] || ('m' + Math.random().toString(36).substr(2, 9)),
+                        name: r["工料名稱"],
+                        unit: r["單位"],
+                        price: parseFloat(r["單價"]) || 0
+                    }));
+
+                    // 讀取分析表清單
+                    const wsProj = workbook.Sheets["分析表清單"];
+                    if (!wsProj) throw new Error("找不到分析表清單分頁");
+                    const projRows = XLSX.utils.sheet_to_json(wsProj);
+                    
+                    // 讀取明細
+                    const wsDetail = workbook.Sheets["分析表細項明細"];
+                    if (!wsDetail) throw new Error("找不到分析表細項明細分頁");
+                    const detailRows = XLSX.utils.sheet_to_json(wsDetail);
+
+                    const newProjects = projRows.map(pr => {
+                        const items = detailRows
+                            .filter(dr => dr["分析表ID"] === pr["ID"])
+                            .map(dr => ({
+                                id: 'i' + Math.random().toString(36).substr(2, 9),
+                                materialId: dr["工料ID"],
+                                quantity: parseFloat(dr["數量"]) || 0,
+                                price: parseFloat(dr["單價"]) || 0
+                            }));
+                        
+                        return {
+                            id: pr["ID"],
+                            code: pr["工項編號"],
+                            name: pr["工程名稱"],
+                            unit: pr["單位"],
+                            items: items
+                        };
+                    });
+
+                    // 更新系統資料
+                    customConfirm("確認匯入", "這將會覆蓋您目前的資料，是否確定？", () => {
+                        materials = newMaterials;
+                        projects = newProjects;
+                        currentProjId = projects[0]?.id || null;
+                        render(true);
+                        showToast("Excel 匯入成功");
+                    });
+
+                } catch (err) {
+                    console.error(err);
+                    alert("匯入失敗：檔案格式不正確或分頁缺失。");
+                }
+                e.target.value = ''; // 重置 input
+            };
+            reader.readAsBinaryString(file);
+        };
+
+        // --- 視圖控制 ---
+        window.switchView = (view) => {
+            document.getElementById('view-editor').classList.toggle('hidden', view !== 'editor');
+            document.getElementById('view-database').classList.toggle('hidden', view !== 'database');
+            document.getElementById('sidebar').classList.toggle('hidden', view !== 'editor');
+            
+            const btnEditor = document.getElementById('btn-editor');
+            const btnDatabase = document.getElementById('btn-database');
+            
+            if (view === 'editor') {
+                btnEditor.className = 'px-3 md:px-5 py-2 rounded-lg font-bold transition-all bg-white shadow-sm text-green-700';
+                btnDatabase.className = 'px-3 md:px-5 py-2 rounded-lg font-bold transition-all text-slate-500 hover:text-slate-700';
+            } else {
+                btnDatabase.className = 'px-3 md:px-5 py-2 rounded-lg font-bold transition-all bg-white shadow-sm text-green-700';
+                btnEditor.className = 'px-3 md:px-5 py-2 rounded-lg font-bold transition-all text-slate-500 hover:text-slate-700';
+            }
+        };
+
+        // --- 核心渲染 ---
+        const render = (shouldSave = false) => {
+            renderProjectList();
+            renderEditor();
+            renderDatabase();
+            if (shouldSave) {
+                localStorage.setItem('materials', JSON.stringify(materials));
+                localStorage.setItem('projects', JSON.stringify(projects));
+                showToast();
+            }
+        };
+
+        const renderProjectList = () => {
+            const list = document.getElementById('project-list');
+            list.innerHTML = projects.map(p => {
+                const total = calculateProjTotal(p);
+                return `
+                    <button onclick="window.selectProject('${p.id}')" class="w-full text-left p-4 rounded-2xl border transition-all ${currentProjId === p.id ? 'bg-green-600 text-white border-green-700 shadow-lg scale-[1.02]' : 'bg-white border-slate-100 hover:bg-green-50 shadow-sm'}">
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-[10px] uppercase font-bold tracking-widest ${currentProjId === p.id ? 'text-green-200' : 'text-slate-400'}">${p.code || '未編號'}</span>
+                        </div>
+                        <div class="font-bold truncate text-lg mb-2">${p.name || '無標題'}</div>
+                        <div class="flex justify-between items-end">
+                            <span class="text-xs ${currentProjId === p.id ? 'text-green-100' : 'text-slate-400'}">合計單價</span>
+                            <span class="font-mono font-black ${currentProjId === p.id ? 'text-white' : 'text-green-600'}">
+                                $${Math.round(total).toLocaleString()}
+                            </span>
+                        </div>
+                    </button>
+                `;
+            }).join('');
+        };
+
+        const renderEditor = () => {
+            const proj = projects.find(p => p.id === currentProjId);
+            if (!proj) {
+                document.getElementById('view-editor').innerHTML = `<div class="py-20 text-center text-slate-300 italic">請在左側選擇或新增一個工程項目</div>`;
+                return;
+            }
+            
+            document.getElementById('proj-code').value = proj.code;
+            document.getElementById('proj-name').value = proj.name;
+            document.getElementById('proj-unit').value = proj.unit;
+
+            const body = document.getElementById('items-body');
+            body.innerHTML = proj.items.map((item, index) => {
+                const mat = materials.find(m => m.id === item.materialId) || { unit: '-' };
+                return `
+                    <tr class="hover:bg-green-50/30 transition-colors">
+                        <td class="py-4 px-2 text-slate-300 font-mono text-sm print-hidden">${index + 1}</td>
+                        <td class="py-3 px-1">
+                            <select onchange="window.updateItem('${item.id}', 'materialId', this.value)" class="w-full bg-transparent p-2 font-bold text-lg outline-none border-b border-transparent focus:border-green-200">
+                                <option value="">-- 選取工料 --</option>
+                                ${materials.map(m => `<option value="${m.id}" ${m.id === item.materialId ? 'selected' : ''}>${m.name}</option>`).join('')}
+                            </select>
+                        </td>
+                        <td class="py-3 px-1 text-center font-bold text-slate-400 text-lg">${mat.unit}</td>
+                        <td class="py-3 px-1">
+                            <input type="number" step="any" value="${item.quantity}" onblur="window.updateItem('${item.id}', 'quantity', this.value)" class="w-full text-right bg-transparent p-2 font-mono font-bold text-lg outline-none border-b border-transparent focus:border-green-200">
+                        </td>
+                        <td class="py-3 px-1">
+                            <input type="number" value="${item.price}" onblur="window.updateItem('${item.id}', 'price', this.value)" class="w-full text-right bg-transparent p-2 font-mono font-bold text-green-700 text-lg outline-none border-b border-transparent focus:border-green-200">
+                        </td>
+                        <td class="py-5 px-2 text-right font-mono font-black text-lg">${Math.round(item.quantity * item.price).toLocaleString()}</td>
+                        <td class="py-5 px-2 text-center print-hidden">
+                            <button onclick="window.removeItem('${item.id}')" class="text-slate-200 hover:text-red-500"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            const total = calculateProjTotal(proj);
+            document.getElementById('total-sum').innerText = Math.round(total).toLocaleString();
+        };
+
+        const renderDatabase = () => {
+            const list = document.getElementById('material-list');
+            list.innerHTML = materials.map((mat, idx) => `
+                <tr class="group hover:bg-green-50 transition-colors">
+                    <td class="p-2 text-center">
+                        <div class="flex flex-col items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onclick="window.moveMaterial(${idx}, -1)" class="p-1 hover:bg-green-200 rounded text-green-600 ${idx === 0 ? 'invisible' : ''}"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"></path></svg></button>
+                            <button onclick="window.moveMaterial(${idx}, 1)" class="p-1 hover:bg-green-200 rounded text-green-600 ${idx === materials.length - 1 ? 'invisible' : ''}"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"></path></svg></button>
+                        </div>
+                    </td>
+                    <td class="p-2"><input value="${mat.name}" onblur="window.updateMaterialInfo('${mat.id}', 'name', this.value)" class="text-lg w-full p-3 font-bold bg-transparent outline-none focus:bg-white rounded-lg"></td>
+                    <td class="p-2"><input value="${mat.unit}" onblur="window.updateMaterialInfo('${mat.id}', 'unit', this.value)" class="text-lg w-full p-3 font-bold text-center bg-transparent outline-none focus:bg-white rounded-lg"></td>
+                    <td class="p-2"><input type="number" value="${mat.price}" onblur="window.syncMaterialPrice('${mat.id}', this.value)" class="text-lg w-full p-3 font-mono font-black text-right text-green-600 bg-transparent outline-none focus:bg-white rounded-lg"></td>
+                    <td class="p-2 text-center"><button onclick="window.deleteMaterial('${mat.id}')" class="text-slate-200 hover:text-red-500"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></td>
+                </tr>
+            `).join('');
+        };
+
+        // --- 全局掛載 API ---
+        window.selectProject = (id) => { currentProjId = id; render(); };
+        window.addProject = () => {
+            const id = 'p' + Date.now();
+            projects.unshift({ id, code: 'NEW-' + Math.floor(Math.random()*900+100), name: '新單價分析表', unit: '式', items: [] });
+            currentProjId = id;
+            render(true);
+        };
+        window.updateProjInfo = (f, v) => { const p = projects.find(x => x.id === currentProjId); if (p) { p[f] = v; render(true); } };
+        window.deleteCurrentProject = () => customConfirm("確認刪除", "確定要永久刪除此分析表嗎？", () => { projects = projects.filter(p => p.id !== currentProjId); currentProjId = projects[0]?.id || null; render(true); });
+        window.addItem = () => { const p = projects.find(x => x.id === currentProjId); if (p) { p.items.push({ id: 'i' + Date.now(), materialId: '', quantity: 0, price: 0 }); render(true); } };
+        window.updateItem = (id, f, v) => {
+            const p = projects.find(x => x.id === currentProjId);
+            const i = p?.items.find(x => x.id === id);
+            if (!i) return;
+            if (f === 'materialId') { const m = materials.find(x => x.id === v); i.materialId = v; i.price = m ? m.price : 0; }
+            else i[f] = parseFloat(v) || 0;
+            render(true);
+        };
+        window.removeItem = (id) => { const p = projects.find(x => x.id === currentProjId); if (p) { p.items = p.items.filter(x => x.id !== id); render(true); } };
+        window.addMaterial = () => { materials.push({ id: 'm' + Date.now(), name: '新工料', unit: '單位', price: 0 }); render(true); };
+        window.updateMaterialInfo = (id, f, v) => { const m = materials.find(x => x.id === id); if (m) { m[f] = v; render(true); } };
+        window.syncMaterialPrice = (id, v) => {
+            const val = parseFloat(v) || 0;
+            const m = materials.find(x => x.id === id);
+            if (m) { m.price = val; projects.forEach(p => p.items.forEach(i => { if (i.materialId === id) i.price = val; })); render(true); }
+        };
+        window.moveMaterial = (idx, dir) => {
+            const target = idx + dir;
+            if (target >= 0 && target < materials.length) {
+                const temp = materials[idx];
+                materials[idx] = materials[target];
+                materials[target] = temp;
+                render(true);
+            }
+        };
+        window.deleteMaterial = (id) => {
+            if (projects.some(p => p.items.some(i => i.materialId === id))) return customConfirm("無法刪除", "此工料已被引用中。", () => {});
+            materials = materials.filter(m => m.id !== id);
+            render(true);
+        };
+
+        render();
+    </script>
+</body>
+</html>
